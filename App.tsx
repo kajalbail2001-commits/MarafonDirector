@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download, ArrowRight } from 'lucide-react';
+import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download } from 'lucide-react';
 import FormInput from './components/FormInput';
 import ImageUploader from './components/ImageUploader';
 import { HomeworkData, UploadStatus, ApiResponse } from './types';

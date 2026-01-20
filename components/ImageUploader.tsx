@@ -1,9 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { MAX_FILE_SIZE_MB } from '../constants';
 import { Upload, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
 
 interface ImageUploaderProps {
-  id: string;
+  id: string; // Left in interface for type compatibility, but removed from usage
   label: string;
   value: string | null;
   onChange: (base64: string | null) => void;
@@ -11,7 +10,6 @@ interface ImageUploaderProps {
 }
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({ 
-  id, 
   label, 
   value, 
   onChange, 
@@ -27,7 +25,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
     if (!file) return;
 
     // Ограничение размера убрано по просьбе пользователя.
-    // Если нужно вернуть, раскомментируйте блок ниже:
+    // Если нужно вернуть, раскомментируйте блок ниже и добавьте импорт MAX_FILE_SIZE_MB из '../constants'
     /*
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       setError(`Файл слишком большой. Максимум ${MAX_FILE_SIZE_MB}MB.`);
