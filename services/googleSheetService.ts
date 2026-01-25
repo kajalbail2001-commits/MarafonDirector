@@ -1,4 +1,4 @@
-import { HomeworkData, ApiResponse } from '../types';
+import { HomeworkData, Day2HomeworkData, ApiResponse } from '../types';
 import { GOOGLE_SCRIPT_URL } from '../constants';
 
 // Функция для очистки URL от возможных пробелов при копировании
@@ -89,6 +89,34 @@ export const submitHomework = async (data: HomeworkData): Promise<ApiResponse> =
     }
   } catch (error) {
     console.error("Submission error:", error);
+    throw error;
+  }
+};
+
+export const submitDay2Homework = async (data: Day2HomeworkData): Promise<ApiResponse> => {
+  const url = getCleanUrl();
+
+  if (!validateUrl(url)) {
+    throw new Error("API URL is not configured.");
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'submitDay2',
+        ...data
+      }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      redirect: "follow"
+    });
+
+    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+    
+    const text = await response.text();
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Day 2 Submission error:", error);
     throw error;
   }
 };

@@ -1,12 +1,15 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download } from 'lucide-react';
+import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download, ArrowRight, Home, LogOut } from 'lucide-react';
 import FormInput from './components/FormInput';
 import ImageUploader from './components/ImageUploader';
-import { HomeworkData, UploadStatus, ApiResponse } from './types';
+import { HomeworkData, Day2HomeworkData, UploadStatus, ApiResponse } from './types';
 import { LABELS, GOOGLE_SCRIPT_URL } from './constants';
-import { submitHomework, checkUserExists, fetchRandomAsset } from './services/googleSheetService';
+import { submitHomework, checkUserExists, fetchRandomAsset, submitDay2Homework } from './services/googleSheetService';
+
+const LOCAL_STORAGE_KEY = 'marathon_user_nick';
 
 const App: React.FC = () => {
+  // Day 1 Form Data
   const [formData, setFormData] = useState<HomeworkData>({
     telegramNick: '',
     baseReference: null,
@@ -15,26 +18,70 @@ const App: React.FC = () => {
     angle3: null,
   });
 
+  // Day 2 Form Data
+  const [day2Data, setDay2Data] = useState<Day2HomeworkData>({
+    telegramNick: '',
+    receivedRef: null,
+    result1: null,
+    result2: null
+  });
+
   const [status, setStatus] = useState<UploadStatus>(UploadStatus.IDLE);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [userExistsWarning, setUserExistsWarning] = useState<boolean>(false);
   const [isCheckingUser, setIsCheckingUser] = useState<boolean>(false);
+  const [isRestoringSession, setIsRestoringSession] = useState<boolean>(true); // Loading state for auto-login
   
   // Day 2 States
   const [isDay2Active, setIsDay2Active] = useState<boolean>(false);
   const [receivedAssets, setReceivedAssets] = useState<ApiResponse['assets'] | null>(null);
   const [receivedAuthor, setReceivedAuthor] = useState<string>('');
   const [isFetchingAsset, setIsFetchingAsset] = useState<boolean>(false);
+  const [isDay2SubmissionMode, setIsDay2SubmissionMode] = useState<boolean>(false);
+  const [day2Success, setDay2Success] = useState<boolean>(false);
   
   // New State: Welcome Back (Skipped Upload)
   const [isWelcomeBack, setIsWelcomeBack] = useState<boolean>(false);
 
-  // --- TELEGRAM INIT ---
+  // --- TELEGRAM INIT & AUTO-LOGIN ---
   useEffect(() => {
-    // Безопасная проверка наличия Telegram API перед вызовом
+    // 1. Telegram Init
     if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
       window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand(); // Принудительно разворачиваем на весь экран
+      window.Telegram.WebApp.expand();
+    }
+
+    // 2. Auto-Login Logic
+    const savedNick = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (savedNick) {
+      // If we have a saved nick, verify it with the backend
+      const verifyUser = async () => {
+        try {
+          // Pre-fill forms
+          setFormData(prev => ({ ...prev, telegramNick: savedNick }));
+          setDay2Data(prev => ({ ...prev, telegramNick: savedNick }));
+          
+          const result = await checkUserExists(savedNick);
+          
+          if (result.exists) {
+            // User confirmed -> Go straight to Success/Menu screen
+            setUserExistsWarning(true);
+            setIsWelcomeBack(true);
+            setStatus(UploadStatus.SUCCESS);
+            if (result.isDay2Active) setIsDay2Active(true);
+          } else {
+            // Nick exists locally but not on server (maybe wiped DB) -> Stay on form, allow re-upload
+            // Do nothing, just stop loading
+          }
+        } catch (e) {
+          console.error("Auto-login failed", e);
+        } finally {
+          setIsRestoringSession(false);
+        }
+      };
+      verifyUser();
+    } else {
+      setIsRestoringSession(false);
     }
   }, []);
 
@@ -93,10 +140,14 @@ const App: React.FC = () => {
 
     setStatus(UploadStatus.UPLOADING);
     setErrorMessage('');
-    setIsWelcomeBack(false); // Reset welcome back flag on fresh submit
+    setIsWelcomeBack(false); 
 
     try {
       const response = await submitHomework(formData);
+      
+      // SAVE SESSION
+      localStorage.setItem(LOCAL_STORAGE_KEY, formData.telegramNick);
+      
       setStatus(UploadStatus.SUCCESS);
       if (response.isDay2Active) {
         setIsDay2Active(true);
@@ -108,14 +159,48 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDay2Submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!day2Data.receivedRef || !day2Data.result1 || !day2Data.result2) {
+       setErrorMessage("Заполните все 3 поля (референс и 2 результата)");
+       return;
+    }
+
+    setStatus(UploadStatus.UPLOADING);
+    setErrorMessage('');
+
+    try {
+      // Ensure we use the nickname from the main form if Day 2 nick is empty
+      const nick = formData.telegramNick || day2Data.telegramNick;
+      const finalData = {
+         ...day2Data,
+         telegramNick: nick
+      };
+      
+      await submitDay2Homework(finalData);
+      
+      // SAVE SESSION (Just in case)
+      localStorage.setItem(LOCAL_STORAGE_KEY, nick);
+
+      setStatus(UploadStatus.SUCCESS);
+      setDay2Success(true);
+    } catch (error) {
+      setStatus(UploadStatus.ERROR);
+      setErrorMessage("Ошибка отправки День 2. Попробуйте еще раз.");
+    }
+  };
+
   const handleGetDay2Asset = async () => {
     setIsFetchingAsset(true);
-    setErrorMessage(''); // Clear previous errors
+    setErrorMessage(''); 
     try {
-      const result = await fetchRandomAsset(formData.telegramNick);
+      const nick = formData.telegramNick || localStorage.getItem(LOCAL_STORAGE_KEY) || "";
+      const result = await fetchRandomAsset(nick);
       if (result.status === 'success' && result.assets) {
         setReceivedAssets(result.assets);
         setReceivedAuthor(result.authorNick || "Аноним");
+        // Pre-fill nick for Day 2 form
+        setDay2Data(prev => ({...prev, telegramNick: nick}));
       } else {
         setErrorMessage(result.message || "Не удалось получить ассеты. Попробуйте позже.");
       }
@@ -127,14 +212,151 @@ const App: React.FC = () => {
   };
 
   const handleSkipToDay2 = () => {
+    // Save session manually if they clicked "I've already submitted"
+    localStorage.setItem(LOCAL_STORAGE_KEY, formData.telegramNick);
+    
     setIsWelcomeBack(true);
     setStatus(UploadStatus.SUCCESS);
   };
 
-  // --- RENDER SUCCESS / DAY 2 STATE ---
+  const handleLogout = () => {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    // Reset states
+    setStatus(UploadStatus.IDLE);
+    setFormData({
+      telegramNick: '',
+      baseReference: null,
+      angle1: null,
+      angle2: null,
+      angle3: null,
+    });
+    setDay2Data(prev => ({ ...prev, telegramNick: '' }));
+    setUserExistsWarning(false);
+    setIsWelcomeBack(false);
+    setIsDay2Active(false);
+    setReceivedAssets(null);
+    setDay2Success(false);
+    setIsDay2SubmissionMode(false);
+  };
+
+  // ---------------------------------------------------------------------------
+  // LOADING SCREEN (Checking LocalStorage/API)
+  // ---------------------------------------------------------------------------
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen bg-warm-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 text-warm-600">
+          <Loader2 className="animate-spin" size={48} />
+          <p className="font-medium text-lg">Вход...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VIEW: DAY 2 SUCCESS (SUBMISSION DONE)
+  // ---------------------------------------------------------------------------
+  if (day2Success) {
+    return (
+      <div className="min-h-screen bg-warm-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center border-2 border-green-100">
+           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600 shadow-sm">
+             <Telescope size={40} />
+           </div>
+           <h2 className="text-2xl font-bold text-warm-900 mb-2">{LABELS.DAY2_SUCCESS_TITLE}</h2>
+           <p className="text-warm-600 mb-6">{LABELS.DAY2_SUCCESS_MSG}</p>
+           
+           <div className="bg-green-50 text-green-800 p-4 rounded-xl border border-green-200 text-sm font-medium">
+             Задание принято. Ждем вас завтра на 3-м дне!
+           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VIEW: DAY 2 FORM
+  // ---------------------------------------------------------------------------
+  if (isDay2SubmissionMode) {
+    return (
+      <div className="min-h-screen bg-warm-50 font-sans text-warm-900 pb-12">
+        <header className="bg-white shadow-sm border-b border-warm-200 sticky top-0 z-10">
+          <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
+            <h1 className="text-lg font-bold text-warm-800">{LABELS.DAY2_TITLE}</h1>
+            <button onClick={() => setIsDay2SubmissionMode(false)} className="text-warm-500 hover:text-warm-800">
+               <Home size={24} />
+            </button>
+          </div>
+        </header>
+
+        <main className="max-w-2xl mx-auto px-4 mt-8">
+           <div className="bg-white rounded-3xl shadow-xl p-6 md:p-10 border border-warm-100 relative overflow-hidden">
+              {status === UploadStatus.UPLOADING && (
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center text-amber-600">
+                  <Loader2 className="animate-spin mb-4" size={48} />
+                  <p className="text-xl font-semibold">Отправка отчета...</p>
+                </div>
+              )}
+
+              <div className="mb-6 text-center">
+                 <h2 className="text-2xl font-bold text-warm-800 mb-2">Форма сдачи (День 2)</h2>
+                 <p className="text-warm-500">Ник: <span className="font-bold text-amber-600">@{formData.telegramNick || day2Data.telegramNick}</span></p>
+              </div>
+
+              <form onSubmit={handleDay2Submit}>
+                <ImageUploader
+                  id="receivedRef"
+                  label={LABELS.DAY2_RECEIVED_REF_LABEL}
+                  value={day2Data.receivedRef}
+                  onChange={(val) => setDay2Data(prev => ({ ...prev, receivedRef: val }))}
+                  required
+                />
+                
+                <div className="h-px bg-warm-100 my-6"></div>
+
+                <ImageUploader
+                  id="res1"
+                  label={LABELS.DAY2_RESULT_1_LABEL}
+                  value={day2Data.result1}
+                  onChange={(val) => setDay2Data(prev => ({ ...prev, result1: val }))}
+                  required
+                />
+                 <ImageUploader
+                  id="res2"
+                  label={LABELS.DAY2_RESULT_2_LABEL}
+                  value={day2Data.result2}
+                  onChange={(val) => setDay2Data(prev => ({ ...prev, result2: val }))}
+                  required
+                />
+
+                {errorMessage && (
+                  <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600">
+                    <AlertCircle className="shrink-0 mt-0.5" />
+                    <p className="font-medium">{errorMessage}</p>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={status === UploadStatus.UPLOADING}
+                  className="w-full mt-8 py-5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all"
+                >
+                  <Send size={20} />
+                  {LABELS.SUBMIT_BTN}
+                </button>
+              </form>
+           </div>
+        </main>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VIEW: DAY 1 SUCCESS / DAY 2 ASSETS (EXCHANGE COMPLETE)
+  // ---------------------------------------------------------------------------
   if (status === UploadStatus.SUCCESS) {
     if (receivedAssets) {
-      // State C: Exchange Complete (SHOW ALL 4 IMAGES)
+      // State C: Exchange Complete (SHOW ASSETS + BUTTON TO SUBMIT)
       return (
         <div className="min-h-screen bg-warm-50 py-10 px-4">
            <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-amber-100">
@@ -148,29 +370,27 @@ const App: React.FC = () => {
                <h2 className="text-3xl font-bold text-warm-900 mb-2">{LABELS.DAY2_EXCHANGE_TITLE}</h2>
                <p className="text-warm-600 mb-6 max-w-xl mx-auto">
                  {LABELS.DAY2_EXCHANGE_DESC} <br/>
-                 Автор материалов: <span className="font-bold text-amber-600">{receivedAuthor}</span>
+                 Автор: <span className="font-bold text-amber-600">{receivedAuthor}</span>
                </p>
 
                {/* GRID OF IMAGES */}
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-left">
-                  {/* Card Helper */}
                   {[
                     { title: LABELS.BASE_REF, url: receivedAssets.base },
                     { title: LABELS.ANGLE_1, url: receivedAssets.angle1 },
                     { title: LABELS.ANGLE_2, url: receivedAssets.angle2 },
                     { title: LABELS.ANGLE_3, url: receivedAssets.angle3 }
                   ].map((item, idx) => (
-                    <div key={idx} className="bg-warm-50 rounded-xl p-3 border border-warm-200 hover:border-amber-300 transition-colors shadow-sm">
+                    <div key={idx} className="bg-warm-50 rounded-xl p-3 border border-warm-200 shadow-sm">
                        <h3 className="font-bold text-warm-700 mb-2 px-1 text-sm">{item.title}</h3>
-                       <div className="aspect-video bg-warm-200 rounded-lg overflow-hidden mb-3 relative group">
+                       <div className="aspect-video bg-warm-200 rounded-lg overflow-hidden mb-3 relative">
                           <img src={item.url} alt={item.title} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
                        </div>
                        <a 
                          href={item.url.replace('export=view', 'export=download')} 
                          target="_blank" 
                          rel="noopener noreferrer"
-                         className="flex items-center justify-center gap-2 w-full py-2 bg-white border border-warm-300 text-warm-700 rounded-lg text-sm font-bold hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition-all"
+                         className="flex items-center justify-center gap-2 w-full py-2 bg-white border border-warm-300 text-warm-700 rounded-lg text-sm font-bold hover:bg-amber-50 hover:border-amber-400 transition-all"
                        >
                          <Download size={16} /> Скачать
                        </a>
@@ -178,8 +398,19 @@ const App: React.FC = () => {
                   ))}
                </div>
                
-               <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-amber-800 text-sm">
-                  <p>📸 <strong>Задание:</strong> Сохраните эти 4 изображения. Используйте их для выполнения задания второго дня.</p>
+               <div className="h-px bg-warm-200 w-full mb-8"></div>
+
+               <div className="bg-amber-50 border border-amber-100 rounded-xl p-6">
+                  <h3 className="text-xl font-bold text-amber-900 mb-2">Готовы сдать работу?</h3>
+                  <p className="text-amber-700 mb-6 text-sm">
+                    Когда выполните задание с этими референсами, нажмите кнопку ниже.
+                  </p>
+                  <button 
+                    onClick={() => setIsDay2SubmissionMode(true)}
+                    className="w-full py-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-lg shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    {LABELS.DAY2_GO_TO_SUBMIT} <ArrowRight size={20} />
+                  </button>
                </div>
              </div>
            </div>
@@ -187,11 +418,11 @@ const App: React.FC = () => {
       );
     }
 
+    // State B: Welcome Screen / Day 1 Success -> Button to get Asset
     return (
       <div className="min-h-screen bg-warm-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center border border-warm-100">
           
-          {/* Success Check or Welcome Back Icon */}
           <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${isWelcomeBack ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
             {isWelcomeBack ? <Telescope size={40} /> : <Check size={40} strokeWidth={3} />}
           </div>
@@ -199,16 +430,15 @@ const App: React.FC = () => {
           <h2 className="text-2xl font-bold text-warm-800 mb-2">
             {isWelcomeBack ? `Привет, ${formData.telegramNick}!` : LABELS.SUCCESS_TITLE}
           </h2>
-          <p className="text-warm-600 mb-8">
+          <p className="text-warm-600 mb-4">
             {isWelcomeBack 
-              ? "Рады видеть вас снова. Вы можете приступить ко второму этапу." 
+              ? "Рады видеть вас снова." 
               : LABELS.SUCCESS_MSG
             }
           </p>
           
-          <div className="h-px bg-warm-100 w-full mb-8"></div>
+          <div className="h-px bg-warm-100 w-full mb-6"></div>
 
-          {/* Display Errors here if Day 2 fetch fails */}
           {errorMessage && (
             <div className="mb-6 p-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100 flex items-center justify-center gap-2 animate-fade-in">
               <AlertCircle size={16} className="shrink-0" />
@@ -216,9 +446,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* Day 2 Button Logic */}
           {isDay2Active ? (
-            // State B: Active
             <button 
               onClick={handleGetDay2Asset}
               disabled={isFetchingAsset}
@@ -240,7 +468,6 @@ const App: React.FC = () => {
               )}
             </button>
           ) : (
-            // State A: Locked
             <div className="opacity-70 grayscale transition-all hover:grayscale-0 hover:opacity-100">
               <button 
                 disabled
@@ -254,22 +481,31 @@ const App: React.FC = () => {
               </p>
             </div>
           )}
+
+          {isWelcomeBack && (
+            <button 
+              onClick={handleLogout}
+              className="mt-6 text-warm-400 text-sm font-semibold hover:text-warm-600 flex items-center justify-center gap-1 mx-auto"
+            >
+              <LogOut size={14} />
+              Не вы? Выйти
+            </button>
+          )}
+
         </div>
       </div>
     );
   }
 
-  // --- RENDER FORM ---
+  // ---------------------------------------------------------------------------
+  // VIEW: MAIN FORM (DAY 1)
+  // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-warm-50 font-sans text-warm-900 pb-12">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-warm-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center gap-4">
           <div className="w-12 h-12 bg-amber-100 rounded-xl overflow-hidden shrink-0 border border-amber-200 shadow-sm">
-             {/* 
-                [НАСТРОЙКА] АВАТАРКА ПРИЛОЖЕНИЯ
-                Чтобы поменять картинку, замените ссылку в src="..." ниже
-             */}
              <img 
                src="https://i.imgur.com/Ru7aBW1.jpeg" 
                alt="Marathon Logo" 
@@ -277,11 +513,6 @@ const App: React.FC = () => {
              />
           </div>
           <div>
-            {/* 
-                [НАСТРОЙКА] ЗАГОЛОВКИ
-                Текст заголовков (LABELS.TITLE, LABELS.SUBTITLE) 
-                находится и меняется в файле constants.ts 
-            */}
             <h1 className="text-xl font-bold text-warm-800 tracking-tight leading-none">
               {LABELS.TITLE}
             </h1>
@@ -296,7 +527,6 @@ const App: React.FC = () => {
       <main className="max-w-2xl mx-auto px-4 mt-8">
         <div className="bg-white rounded-3xl shadow-xl shadow-warm-200/50 p-6 md:p-10 border border-warm-100 relative overflow-hidden">
           
-          {/* Form Loader Overlay */}
           {status === UploadStatus.UPLOADING && (
             <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center text-amber-600">
               <Loader2 className="animate-spin mb-4" size={48} />
@@ -305,8 +535,6 @@ const App: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit}>
-            
-            {/* Nickname Section */}
             <div className="mb-8">
               <FormInput
                 id="telegram"
@@ -321,7 +549,6 @@ const App: React.FC = () => {
                 required
               />
               
-              {/* Checking Status */}
               {isCheckingUser && (
                 <div className="text-warm-400 text-sm flex items-center mt-2 px-1">
                   <Loader2 size={14} className="animate-spin mr-2" />
@@ -329,7 +556,6 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              {/* Duplicate Warning & Day 2 Skip */}
               {userExistsWarning && (
                 <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col gap-4 text-amber-800 animate-fade-in">
                   <div className="flex items-start gap-3">
@@ -337,13 +563,11 @@ const App: React.FC = () => {
                     <div>
                       <p className="font-bold mb-1">Вы уже сдавали работу</p>
                       <p className="text-sm text-amber-700 leading-relaxed">
-                        Мы нашли задание от <strong>{formData.telegramNick}</strong>. 
-                        Если вы хотите обновить файлы, отправьте форму снова. Старые файлы будут помечены как устаревшие.
+                        Мы нашли задание от <strong>{formData.telegramNick}</strong>.
                       </p>
                     </div>
                   </div>
 
-                  {/* Show Skip Button if Day 2 is Active */}
                   {isDay2Active && (
                     <button 
                        type="button"
@@ -360,7 +584,6 @@ const App: React.FC = () => {
 
             <div className="h-px bg-warm-100 my-8"></div>
 
-            {/* Images Section */}
             <div className="space-y-6">
               <ImageUploader
                 id="baseRef"
@@ -369,7 +592,6 @@ const App: React.FC = () => {
                 onChange={(val) => setFormData(prev => ({ ...prev, baseReference: val }))}
                 required
               />
-              
               <ImageUploader
                 id="angle1"
                 label={LABELS.ANGLE_1}
@@ -377,7 +599,6 @@ const App: React.FC = () => {
                 onChange={(val) => setFormData(prev => ({ ...prev, angle1: val }))}
                 required
               />
-
               <ImageUploader
                 id="angle2"
                 label={LABELS.ANGLE_2}
@@ -385,7 +606,6 @@ const App: React.FC = () => {
                 onChange={(val) => setFormData(prev => ({ ...prev, angle2: val }))}
                 required
               />
-
               <ImageUploader
                 id="angle3"
                 label={LABELS.ANGLE_3}
@@ -395,7 +615,6 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Error Message */}
             {errorMessage && (
               <div className="mt-8 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600">
                 <AlertCircle className="shrink-0 mt-0.5" />
@@ -403,7 +622,6 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* Submit Button */}
             <div className="mt-10 sticky bottom-6 z-20">
                <button
                 type="submit"
@@ -432,7 +650,6 @@ const App: React.FC = () => {
 
           </form>
         </div>
-        
         <p className="text-center text-warm-400 mt-8 mb-12 text-sm">
           ИИ-РЕЖИССУРА © 2026
         </p>

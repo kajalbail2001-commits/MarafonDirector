@@ -6,6 +6,13 @@ export interface HomeworkData {
   angle3: string | null;
 }
 
+export interface Day2HomeworkData {
+  telegramNick: string;
+  receivedRef: string | null; // Референс, который достался (для контроля)
+  result1: string | null;     // Результат 1
+  result2: string | null;     // Результат 2
+}
+
 export enum UploadStatus {
   IDLE = 'IDLE',
   UPLOADING = 'UPLOADING',
