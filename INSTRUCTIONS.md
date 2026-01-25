@@ -25,7 +25,7 @@ function handleRequest(e) {
   lock.tryLock(30000);
 
   try {
-    // 1. Обработка POST запросов
+    // 1. Обработка POST запросов (Отправка формы или запрос ассета)
     if (e.postData) {
       var data = JSON.parse(e.postData.contents);
       
@@ -48,7 +48,7 @@ function handleRequest(e) {
       var ang2Img = processImage(data.angle2, folder, userNick + "_angle2");
       var ang3Img = processImage(data.angle3, folder, userNick + "_angle3");
 
-      // Красим дубликаты
+      // Красим дубликаты (если пользователь уже был, помечаем старую строку красным)
       var rows = sheet.getDataRange().getValues();
       var checkNick = String(userNick).trim().toLowerCase();
       for (var i = 1; i < rows.length; i++) {
@@ -66,15 +66,23 @@ function handleRequest(e) {
       });
     }
     
-    // 2. Обработка GET запросов (проверка ника)
+    // 2. Обработка GET запросов (проверка наличия пользователя при вводе ника)
     if (e.parameter && e.parameter.nick) {
       var nick = String(e.parameter.nick).trim().toLowerCase();
       var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
       var data = sheet.getDataRange().getValues();
       var exists = false;
+      
+      // Ищем пользователя в таблице
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][1]).trim().toLowerCase() === nick) {
-          exists = true; break;
+        var rowNick = String(data[i][1]).trim().toLowerCase();
+        
+        // Проверяем ТОЛЬКО Ник. 
+        // Если вы удалили картинки (из-за плохого качества), но оставили строку с ником,
+        // пользователь все равно сможет пройти дальше (получить чужой ассет).
+        if (rowNick === nick) {
+           exists = true; 
+           break; 
         }
       }
       return sendJSON({ 
@@ -105,26 +113,40 @@ function getRandomAsset(requestingUserNick) {
   var values = range.getValues();
   var formulas = range.getFormulas(); 
 
-  // values[0] это заголовок
   if (values.length < 2) {
     return { "status": "error", "message": "В таблице нет данных участников" };
   }
 
   var candidates = [];
   var reqNick = requestingUserNick ? String(requestingUserNick).trim().toLowerCase() : "";
+  var userExists = false;
 
-  // Собираем всех кандидатов (исключая самого пользователя)
+  // 1. Проверяем, есть ли запрашивающий пользователь в таблице (по Нику)
   for (var i = 1; i < values.length; i++) {
     var rowNick = String(values[i][1]).trim().toLowerCase();
     
-    // Индексы колонок:
-    // 0: Time, 1: Nick, 2: Base, 3: Angle1, 4: Angle2, 5: Angle3
+    if (rowNick === reqNick) {
+      userExists = true;
+      break; 
+    }
+  }
+
+  if (!userExists) {
+    return { "status": "error", "message": "Ваш ник не найден в списке сдавших День 1." };
+  }
+
+  // 2. Собираем кандидатов для обмена (ТЕХ, У КОГО ЕСТЬ КАРТИНКИ)
+  for (var i = 1; i < values.length; i++) {
+    var rowNick = String(values[i][1]).trim().toLowerCase();
+    
     var baseRaw = formulas[i][2] || values[i][2];
     var ang1Raw = formulas[i][3] || values[i][3];
     var ang2Raw = formulas[i][4] || values[i][4];
     var ang3Raw = formulas[i][5] || values[i][5];
 
-    // Проверяем, что это не тот же юзер и базовая ссылка не пуста
+    // Условия отбора донора:
+    // 1. Не он сам
+    // 2. Есть картинка (обязательно!)
     if (rowNick !== reqNick && baseRaw && String(baseRaw).length > 10) {
        candidates.push({
          nick: values[i][1],
@@ -137,10 +159,7 @@ function getRandomAsset(requestingUserNick) {
   }
 
   if (candidates.length === 0) {
-    if (values.length > 1) {
-       return { "status": "error", "message": "Другие участники найдены, но их ссылки не читаются. Проверьте таблицу." };
-    }
-    return { "status": "error", "message": "Пока нет других участников для обмена." };
+    return { "status": "error", "message": "Пока нет доступных участников с корректными ссылками для обмена." };
   }
 
   // Выбираем случайного
