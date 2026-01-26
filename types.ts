@@ -42,7 +42,15 @@ declare global {
         ready: () => void;
         expand: () => void;
         openLink: (url: string, options?: { tryInstantView?: boolean }) => void;
-        // Можно добавить другие методы при необходимости
+        initDataUnsafe: {
+          user?: {
+            id: number;
+            first_name?: string;
+            last_name?: string;
+            username?: string;
+            language_code?: string;
+          };
+        };
       };
     };
   }

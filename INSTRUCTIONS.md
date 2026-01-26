@@ -1,15 +1,11 @@
+
 # Google Apps Script Code
 
 Код для вставки в редактор скриптов (Расширения > Apps Script).
 
-**⚠️ КРИТИЧЕСКИ ВАЖНО ПОСЛЕ ВСТАВКИ КОДА:**
-1. Нажмите синюю кнопку **Начать развертывание** (Deploy).
-2. Выберите **Управление развертываниями** (Manage deployments).
-3. Нажмите иконку **Карандаша** (Edit) справа сверху.
-4. В поле **Версия** выберите **"Новая версия"** (New version).
-5. Нажмите **Развернуть** (Deploy).
-
-Если вы этого не сделаете, будет работать СТАРЫЙ код и День 2 не заработает!
+**⚠️ КРИТИЧЕСКИ ВАЖНО:**
+1. Вставьте токен вашего бота в переменную `BOT_TOKEN` (строка 10).
+2. Нажмите синюю кнопку **Начать развертывание** (Deploy) -> **Управление** -> **Карандаш** -> **Новая версия** -> **Развернуть**.
 
 ```javascript
 // -------------------------------------------------------------
@@ -18,8 +14,10 @@
 var FOLDER_NAME = "Marathon_Images"; 
 var DAY2_SHEET_NAME = "Day_2_Submissions";
 
+// Вставь сюда токен от BotFather (например: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11")
+var BOT_TOKEN = "8512515016:AAGA5SJdmvjYZEOH71krXVkkAoRE73727Oc"; 
+
 // --- ПЕРЕКЛЮЧАТЕЛЬ ДНЯ 2 ---
-// Измените на true, когда нужно запустить второй день!
 var IS_DAY_2_ACTIVE = true; 
 // -------------------------------------------------------------
 
@@ -32,24 +30,42 @@ function handleRequest(e) {
   lock.tryLock(30000);
 
   try {
-    // 1. Обработка POST запросов
     if (e.postData) {
       var data = JSON.parse(e.postData.contents);
       
-      // Сценарий A: Запрос на получение случайного ассета
+      // A. Получить случайный ассет
       if (data.action === 'getRandomAsset') {
          var result = getRandomAsset(data.telegramNick);
          return sendJSON(result);
       }
 
-      // Сценарий B: Сдача задания ДЕНЬ 2
+      // B. Отправить ассеты прямо в чат (НОВАЯ ФУНКЦИЯ)
+      if (data.action === 'sendAssetsToChat') {
+         if (!BOT_TOKEN || BOT_TOKEN === "ВСТАВЬ_СЮДА_ТОКЕН_БОТА") {
+           return sendJSON({ "status": "error", "message": "Bot Token not configured in Script" });
+         }
+         
+         var chatId = data.chatId;
+         var assets = data.assets; // Объект {base: url, angle1: url...}
+         
+         if (!chatId) return sendJSON({ "status": "error", "message": "No Chat ID" });
+         
+         // Отправляем 4 файла
+         sendPhotoToTelegram(chatId, assets.base, "📂 Базовый референс");
+         sendPhotoToTelegram(chatId, assets.angle1, "📸 Ракурс 1");
+         sendPhotoToTelegram(chatId, assets.angle2, "📸 Ракурс 2");
+         sendPhotoToTelegram(chatId, assets.angle3, "📸 Ракурс 3");
+         
+         return sendJSON({ "status": "success", "message": "Files sent to chat" });
+      }
+
+      // C. Сдача задания ДЕНЬ 2
       if (data.action === 'submitDay2') {
          var sheet = getOrCreateSheet(DAY2_SHEET_NAME);
          var folder = getOrCreateFolder(FOLDER_NAME);
          var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd.MM.yyyy HH:mm");
          var userNick = data.telegramNick || "Аноним";
 
-         // Сохраняем картинки Дня 2
          var receivedRef = processImage(data.receivedRef, folder, userNick + "_day2_received");
          var res1 = processImage(data.result1, folder, userNick + "_day2_res1");
          var res2 = processImage(data.result2, folder, userNick + "_day2_res2");
@@ -59,14 +75,12 @@ function handleRequest(e) {
          return sendJSON({ "status": "success", "message": "Day 2 Submitted" });
       }
 
-      // Сценарий C: Обычная загрузка домашки (День 1)
+      // D. Сдача задания ДЕНЬ 1
       var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
       var folder = getOrCreateFolder(FOLDER_NAME);
-      
       var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd.MM.yyyy HH:mm");
       var userNick = data.telegramNick || "Аноним";
 
-      // Сохраняем картинки День 1
       var refImg = processImage(data.baseReference, folder, userNick + "_base");
       var ang1Img = processImage(data.angle1, folder, userNick + "_angle1");
       var ang2Img = processImage(data.angle2, folder, userNick + "_angle2");
@@ -89,23 +103,16 @@ function handleRequest(e) {
       });
     }
     
-    // 2. Обработка GET запросов
+    // GET запрос (проверка юзера)
     if (e.parameter && e.parameter.nick) {
       var nick = String(e.parameter.nick).trim().toLowerCase();
-      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet(); // Проверяем по День 1
+      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
       var data = sheet.getDataRange().getValues();
       var exists = false;
-      
       for (var i = 1; i < data.length; i++) {
-        if (String(data[i][1]).trim().toLowerCase() === nick) {
-           exists = true; 
-           break; 
-        }
+        if (String(data[i][1]).trim().toLowerCase() === nick) { exists = true; break; }
       }
-      return sendJSON({ 
-        "exists": exists,
-        "isDay2Active": IS_DAY_2_ACTIVE
-      });
+      return sendJSON({ "exists": exists, "isDay2Active": IS_DAY_2_ACTIVE });
     }
     
     return sendJSON({ "status": "error", "message": "No data" });
@@ -117,12 +124,44 @@ function handleRequest(e) {
   }
 }
 
-function getRandomAsset(requestingUserNick) {
-  if (!IS_DAY_2_ACTIVE) {
-    return { "status": "error", "message": "День 2 еще закрыт" };
-  }
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet(); // Берем из первого листа
+function sendPhotoToTelegram(chatId, driveUrl, caption) {
+  try {
+    var fileId = extractIdFromUrl(driveUrl);
+    if (!fileId) return;
+
+    // Скачиваем файл внутри скрипта как Blob
+    var imageBlob = DriveApp.getFileById(fileId).getBlob();
+    
+    var payload = {
+      'chat_id': String(chatId),
+      'photo': imageBlob,
+      'caption': caption
+    };
+
+    var options = {
+      'method': 'post',
+      'payload': payload,
+      'muteHttpExceptions': true
+    };
+
+    UrlFetchApp.fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendPhoto', options);
+  } catch (e) {
+    // Игнорируем ошибки отправки отдельных фото, чтобы не ломать весь процесс
+    Logger.log("Error sending photo: " + e.toString());
+  }
+}
+
+function extractIdFromUrl(url) {
+  var match = String(url).match(/id=([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+function getRandomAsset(requestingUserNick) {
+  if (!IS_DAY_2_ACTIVE) return { "status": "error", "message": "День 2 еще закрыт" };
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var range = sheet.getDataRange();
   var values = range.getValues();
   var formulas = range.getFormulas(); 
@@ -133,17 +172,11 @@ function getRandomAsset(requestingUserNick) {
   var reqNick = requestingUserNick ? String(requestingUserNick).trim().toLowerCase() : "";
   var userExists = false;
 
-  // Проверяем наличие юзера
   for (var i = 1; i < values.length; i++) {
-    if (String(values[i][1]).trim().toLowerCase() === reqNick) {
-      userExists = true;
-      break; 
-    }
+    if (String(values[i][1]).trim().toLowerCase() === reqNick) { userExists = true; break; }
   }
-
   if (!userExists) return { "status": "error", "message": "Ваш ник не найден." };
 
-  // Собираем кандидатов
   for (var i = 1; i < values.length; i++) {
     var rowNick = String(values[i][1]).trim().toLowerCase();
     var baseRaw = formulas[i][2] || values[i][2];
@@ -154,25 +187,21 @@ function getRandomAsset(requestingUserNick) {
     if (rowNick !== reqNick && baseRaw && String(baseRaw).length > 10) {
        candidates.push({
          nick: values[i][1],
-         base: baseRaw,
-         ang1: ang1Raw,
-         ang2: ang2Raw,
-         ang3: ang3Raw
+         base: extractUrlFromFormula(baseRaw),
+         ang1: extractUrlFromFormula(ang1Raw),
+         ang2: extractUrlFromFormula(ang2Raw),
+         ang3: extractUrlFromFormula(ang3Raw)
        });
     }
   }
 
-  if (candidates.length === 0) return { "status": "error", "message": "Нет доступных работ для обмена." };
-
+  if (candidates.length === 0) return { "status": "error", "message": "Нет работ для обмена." };
   var winner = candidates[Math.floor(Math.random() * candidates.length)];
   
   return {
     "status": "success",
-    "assets": {
-        "base": extractUrlFromFormula(winner.base),
-        "angle1": extractUrlFromFormula(winner.ang1),
-        "angle2": extractUrlFromFormula(winner.ang2),
-        "angle3": extractUrlFromFormula(winner.ang3)
+    "assets": winner.assets || { // Fallback format handle
+        "base": winner.base, "angle1": winner.ang1, "angle2": winner.ang2, "angle3": winner.ang3
     },
     "authorNick": winner.nick
   };
@@ -197,8 +226,7 @@ function processImage(base64String, folder, filenamePrefix) {
     var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, filenamePrefix + "_" + Date.now() + ".png");
     var file = folder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    var viewUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
-    return '=HYPERLINK("' + viewUrl + '"; IMAGE("' + viewUrl + '"))';
+    return '=HYPERLINK("https://drive.google.com/uc?export=view&id=' + file.getId() + '"; IMAGE("https://drive.google.com/uc?export=view&id=' + file.getId() + '"))';
   } catch (e) { return "Error: " + e.toString(); }
 }
 
@@ -210,10 +238,7 @@ function getOrCreateFolder(name) {
 function getOrCreateSheet(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-    sheet.appendRow(["Timestamp", "Nick", "ReceivedRef", "Result1", "Result2"]);
-  }
+  if (!sheet) { sheet = ss.insertSheet(name); sheet.appendRow(["Timestamp", "Nick", "ReceivedRef", "Result1", "Result2"]); }
   return sheet;
 }
 

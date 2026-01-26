@@ -148,3 +148,27 @@ export const fetchRandomAsset = async (myNick: string): Promise<ApiResponse> => 
     throw error;
   }
 };
+
+export const sendAssetsToChat = async (chatId: number, assets: { base: string; angle1: string; angle2: string; angle3: string; }): Promise<ApiResponse> => {
+  const url = getCleanUrl();
+  if (!validateUrl(url)) throw new Error("API URL not configured");
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'sendAssetsToChat',
+        chatId: chatId,
+        assets: assets
+      }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      redirect: "follow"
+    });
+
+    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+    return JSON.parse(await response.text());
+  } catch (error) {
+    console.error("Send to Chat error:", error);
+    throw error;
+  }
+};

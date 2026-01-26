@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download, ArrowRight, Home, LogOut, PartyPopper } from 'lucide-react';
+import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download, ArrowRight, Home, LogOut, PartyPopper, MessageCircle } from 'lucide-react';
 import FormInput from './components/FormInput';
 import ImageUploader from './components/ImageUploader';
 import { HomeworkData, Day2HomeworkData, UploadStatus, ApiResponse } from './types';
 import { LABELS, GOOGLE_SCRIPT_URL } from './constants';
-import { submitHomework, checkUserExists, fetchRandomAsset, submitDay2Homework } from './services/googleSheetService';
+import { submitHomework, checkUserExists, fetchRandomAsset, submitDay2Homework, sendAssetsToChat } from './services/googleSheetService';
 
 const LOCAL_STORAGE_KEY = 'marathon_user_nick';
 
@@ -39,11 +39,16 @@ const App: React.FC = () => {
   const [isFetchingAsset, setIsFetchingAsset] = useState<boolean>(false);
   const [isDay2SubmissionMode, setIsDay2SubmissionMode] = useState<boolean>(false);
   const [day2Success, setDay2Success] = useState<boolean>(false);
+  const [isSendingToChat, setIsSendingToChat] = useState<boolean>(false);
+  const [sentToChatSuccess, setSentToChatSuccess] = useState<boolean>(false);
   
   // New State: Welcome Back (Skipped Upload)
   const [isWelcomeBack, setIsWelcomeBack] = useState<boolean>(false);
   // Manual override to show Day 1 form even if user exists
   const [showDay1Anyway, setShowDay1Anyway] = useState<boolean>(false);
+
+  // Telegram User ID
+  const [telegramUserId, setTelegramUserId] = useState<number | null>(null);
 
   // --- TELEGRAM INIT & AUTO-LOGIN ---
   useEffect(() => {
@@ -51,6 +56,10 @@ const App: React.FC = () => {
     if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
+      
+      // Get User ID for "Send to Chat" feature
+      const userId = window.Telegram.WebApp.initDataUnsafe?.user?.id;
+      if (userId) setTelegramUserId(userId);
     }
 
     // 2. Auto-Login Logic
@@ -210,6 +219,20 @@ const App: React.FC = () => {
       setIsFetchingAsset(false);
     }
   };
+  
+  const handleSendToChat = async () => {
+    if (!receivedAssets || !telegramUserId) return;
+    
+    setIsSendingToChat(true);
+    try {
+       await sendAssetsToChat(telegramUserId, receivedAssets);
+       setSentToChatSuccess(true);
+    } catch (e) {
+       alert("Не удалось отправить. Попробуйте еще раз или скачайте вручную.");
+    } finally {
+       setIsSendingToChat(false);
+    }
+  };
 
   const handleSkipToDay2 = () => {
     // Save session manually if they clicked "I've already submitted"
@@ -238,19 +261,15 @@ const App: React.FC = () => {
     setDay2Success(false);
     setIsDay2SubmissionMode(false);
     setShowDay1Anyway(false);
+    setSentToChatSuccess(false);
   };
 
   // CORRECT DOWNLOAD HANDLER FOR ANDROID/TELEGRAM
   const handleDownloadAsset = (url: string) => {
-    // Ensure we request the download version
     const downloadUrl = url.replace('export=view', 'export=download');
-    
     if (window.Telegram?.WebApp) {
-      // Telegram WebApp: Force external browser. This fixes the "UC.bin" issue
-      // because the system browser handles the Content-Disposition header correctly.
       window.Telegram.WebApp.openLink(downloadUrl, { tryInstantView: false });
     } else {
-      // Standard Browser: Open in new tab
       window.open(downloadUrl, '_blank');
     }
   };
@@ -389,7 +408,30 @@ const App: React.FC = () => {
                  Автор: <span className="font-bold text-amber-600">{receivedAuthor}</span>
                </p>
 
-               {/* GRID OF IMAGES */}
+               {/* === NEW FEATURE: SEND TO CHAT BUTTON === */}
+               {telegramUserId ? (
+                 <div className="mb-8">
+                    {!sentToChatSuccess ? (
+                      <button 
+                        onClick={handleSendToChat}
+                        disabled={isSendingToChat}
+                        className="w-full py-5 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-3 active:scale-95"
+                      >
+                         {isSendingToChat ? <Loader2 className="animate-spin" /> : <MessageCircle size={24} />}
+                         {isSendingToChat ? "Отправляю..." : "Прислать мне всё в личку"}
+                      </button>
+                    ) : (
+                      <div className="w-full py-4 bg-green-100 text-green-700 rounded-2xl font-bold flex items-center justify-center gap-2 border border-green-200">
+                         <Check size={24} /> Отправлено! Проверьте чат
+                      </div>
+                    )}
+                    <p className="text-xs text-warm-400 mt-2">Бот пришлет вам 4 фотографии</p>
+                 </div>
+               ) : (
+                 <p className="text-xs text-red-400 mb-4">Откройте через Telegram для отправки в личку</p>
+               )}
+               {/* ======================================== */}
+
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-left">
                   {[
                     { title: LABELS.BASE_REF, url: receivedAssets.base },
@@ -403,17 +445,12 @@ const App: React.FC = () => {
                           <img src={item.url} alt={item.title} className="w-full h-full object-cover" />
                        </div>
                        
-                       {/* DOWNLOAD BUTTON UPDATED: Uses onClick handler to force external browser */}
                        <button 
                          onClick={() => handleDownloadAsset(item.url)}
                          className="flex items-center justify-center gap-2 w-full py-3 bg-white border border-warm-300 text-warm-700 rounded-lg text-sm font-bold hover:bg-amber-50 hover:border-amber-400 transition-all shadow-sm"
                        >
-                         <Download size={16} /> Скачать файл
+                         <Download size={16} /> Скачать вручную
                        </button>
-                       <p className="text-xs text-warm-400 text-center mt-2">
-                          Откроется браузер для скачивания. <br/>
-                          Или зажмите фото для сохранения.
-                       </p>
                     </div>
                   ))}
                </div>
