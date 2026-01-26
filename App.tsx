@@ -226,11 +226,26 @@ const App: React.FC = () => {
     setIsSendingToChat(true);
     try {
        const response = await sendAssetsToChat(telegramUserId, receivedAssets);
+       
        if (response.status === 'success') {
          setSentToChatSuccess(true);
        } else {
-         // Show specific error from backend (e.g. Bot blocked)
-         alert("Ошибка отправки: " + response.message + "\n\nПопробуйте перезапустить бота командой /start");
+         const msg = response.message || "";
+         
+         // SPECIAL HANDLER FOR PERMISSION ERRORS
+         if (msg.includes("UrlFetchApp") || msg.includes("script.external_request")) {
+           alert(
+             "⚠️ ОШИБКА НАСТРОЕК (Для Администратора):\n\n" +
+             "Скрипт не имеет прав на выход в интернет.\n" +
+             "1. Зайдите в Google Apps Script.\n" +
+             "2. Запустите функцию 'A_SETUP_CLICK_ME'.\n" +
+             "3. При Deploy убедитесь, что выбрано 'Execute as: Me' (от Вашего имени), а не от пользователя."
+           );
+         } else if (msg.includes("blocked")) {
+           alert("Бот заблокирован пользователем. Напишите боту /start и попробуйте снова.");
+         } else {
+           alert("Ошибка отправки: " + msg);
+         }
        }
     } catch (e) {
        alert("Не удалось отправить. Попробуйте еще раз или скачайте вручную.");

@@ -1,12 +1,33 @@
 // ============================================================================
-// ИНСТРУКЦИЯ (ЧИТАТЬ ВНИМАТЕЛЬНО):
-// 1. Вставьте этот код в файл Code.gs.
-// 2. НАЖМИТЕ СОХРАНИТЬ (💾) ИЛИ CTRL+S. ЭТО ВАЖНО!
-// 3. Вверху в выпадающем списке выберите функцию "A_SETUP_CLICK_ME".
-// 4. Нажмите кнопку "Run" (▶).
-// 5. Дайте разрешения (Review Permissions -> Advanced -> Go to (unsafe) -> Allow).
-// 6. Сделайте Deploy -> New Deployment.
+// ИНСТРУКЦИЯ ПО УСТАНОВКЕ
 // ============================================================================
+// 1. Скопируйте весь код ниже в файл Code.gs в редакторе Google Apps Script.
+// 2. Очистите файл, если там что-то было. Вставьте новый код.
+// 3. !!! НАЖМИТЕ КНОПКУ СОХРАНИТЬ (Иконка дискеты 💾) !!!
+//
+// 4. ПЕРВЫЙ ЗАПУСК (Настройка прав):
+//    - В панели инструментов выберите функцию "A_SETUP_CLICK_ME".
+//    - Нажмите кнопку "Run" (▶).
+//    - Google попросит разрешения ("Authorization Required").
+//    - Нажмите: Review Permissions -> Выберите аккаунт -> Advanced -> Go to ... (unsafe) -> Allow.
+//    - Дождитесь сообщения в логе: "✅ УСПЕШНО!".
+//
+// 5. РАЗВЕРТЫВАНИЕ (DEPLOY) - САМОЕ ВАЖНОЕ:
+//    - Нажмите кнопку "Deploy" (синяя справа вверху) -> "New deployment".
+//    - Нажмите на шестеренку (Select type) -> Web app.
+//    - Description: Любое (например "v2").
+//    - Execute as: ---> ME (ВАЖНО! Выберите ваш email) <---
+//    - Who has access: ---> Anyone (Все) <---
+//    - Нажмите "Deploy".
+//
+// 6. Скопируйте новый Web App URL (заканчивается на /exec).
+// 7. Вставьте этот URL в файл constants.ts в вашем React проекте.
+// ============================================================================
+
+/**
+ * @OnlyCurrentDoc
+ * @NotOnlyCurrentDoc
+ */
 
 // --- НАСТРОЙКИ ---
 var FOLDER_NAME = "Marathon_Images"; 
@@ -14,23 +35,29 @@ var DAY2_SHEET_NAME = "Day_2_Submissions";
 var BOT_TOKEN = "8512515016:AAGA5SJdmvjYZEOH71krXVkkAoRE73727Oc"; 
 var IS_DAY_2_ACTIVE = true; 
 
-// --- ЗАПУСТИТЕ ЭТУ ФУНКЦИЮ ПЕРВЫЙ РАЗ РУКАМИ ---
+// --- ФУНКЦИЯ НАСТРОЙКИ (ЗАПУСТИТЬ ВРУЧНУЮ 1 РАЗ) ---
 function A_SETUP_CLICK_ME() {
-  Logger.log("📢 НАЧИНАЕМ УСТАНОВКУ...");
-  Logger.log("1. Проверяем доступ к Диску...");
-  var folders = DriveApp.getFolders(); 
+  Logger.log("📢 НАЧИНАЕМ ПРОВЕРКУ ПРАВ...");
   
-  Logger.log("2. Проверяем доступ к Интернету (Telegram)...");
+  // 1. Проверяем доступ к Диску
+  Logger.log("...Проверка DriveApp...");
+  var folders = DriveApp.getFolders();
+  if (folders.hasNext()) Logger.log("   DriveApp OK");
+  
+  // 2. Проверяем доступ к Интернету
+  Logger.log("...Проверка UrlFetchApp...");
   try {
-    UrlFetchApp.fetch("https://api.telegram.org");
+    UrlFetchApp.fetch("https://google.com");
+    Logger.log("   UrlFetchApp OK");
   } catch(e) {
-    // Ошибка тут нормальна, главное что мы дернули fetch
+    Logger.log("   UrlFetchApp Error (это нормально при первом запуске, если вы дали права): " + e);
   }
   
-  Logger.log("✅ УСПЕШНО! Все разрешения получены.");
-  Logger.log("👉 Теперь нажмите синюю кнопку 'Deploy' -> 'New deployment' справа сверху.");
+  Logger.log("✅ СКРИПТ ГОТОВ К РАБОТЕ.");
+  Logger.log("⚠️ ВАЖНО: При Deploy выберите 'Execute as: Me' и 'Who has access: Anyone'.");
 }
-// -----------------------------------------------
+
+// --- ОСНОВНОЙ КОД ---
 
 function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
@@ -47,13 +74,21 @@ function handleRequest(e) {
       return handleSubmitDay1(d);
     }
     if (e.parameter && e.parameter.nick) return checkUser(e.parameter.nick);
-    return sendJSON({ "status": "error", "message": "No data" });
+    return sendJSON({ "status": "error", "message": "No data received" });
   } catch (err) { return sendJSON({ "status": "error", "message": err.toString() });
   } finally { lock.releaseLock(); }
 }
 
 function handleSendAssets(d) {
-   if (!BOT_TOKEN || BOT_TOKEN.indexOf(":") === -1) return sendJSON({ "status": "error", "message": "Bad Token" });
+   if (!BOT_TOKEN || BOT_TOKEN.indexOf(":") === -1) return sendJSON({ "status": "error", "message": "Invalid Bot Token" });
+   
+   // Проверяем возможность выхода в интернет ДО основной работы
+   try {
+      UrlFetchApp.fetch("https://api.telegram.org");
+   } catch(e) {
+      return sendJSON({ "status": "error", "message": "UrlFetchApp Permission Error. Script must run as 'Me'." });
+   }
+
    var chatId = d.chatId;
    sendMessageToTelegram(chatId, "👋 Привет! Отправляю файлы...");
    var errs = [];
