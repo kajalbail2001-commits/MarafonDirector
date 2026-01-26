@@ -479,8 +479,8 @@ const App: React.FC = () => {
                <div className="h-px bg-warm-200 w-full mb-8"></div>
 
                {/* === MANUAL DOWNLOAD SECTION (MOVED DOWN) === */}
-               <p className="text-sm text-warm-500 mb-4 text-center px-4">
-                 ⚠️ У кого не приходят референсы по синей кнопке, попробуйте скачать вручную:
+               <p className="text-sm text-warm-600 font-bold mb-4 text-center px-4">
+                 у кого не приходят референсы по синей кнопке попробуйте вручную скачать:
                </p>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-left">
