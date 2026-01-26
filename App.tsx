@@ -62,8 +62,14 @@ const App: React.FC = () => {
       if (userId) setTelegramUserId(userId);
     }
 
-    // 2. Auto-Login Logic
+    // 2. Auto-Login Logic with Safety Timeout
     const savedNick = localStorage.getItem(LOCAL_STORAGE_KEY);
+    
+    // Safety timeout: if server is slow/down, don't show white screen forever
+    const safetyTimer = setTimeout(() => {
+       setIsRestoringSession(false);
+    }, 5000);
+
     if (savedNick) {
       // Pre-fill forms immediately for better UX
       setFormData(prev => ({ ...prev, telegramNick: savedNick }));
@@ -75,7 +81,7 @@ const App: React.FC = () => {
           
           if (result.error) {
              // Server error: Don't just show Day 1, warn user
-             setErrorMessage("⚠️ Сервер недоступен (ошибка скрипта или сети). Ваш статус не загружен.");
+             setErrorMessage("⚠️ Сервер недоступен. Проверьте интернет.");
           } else if (result.exists) {
             // User confirmed -> Go straight to Success/Menu screen
             setUserExistsWarning(true);
@@ -86,13 +92,17 @@ const App: React.FC = () => {
         } catch (e) {
           console.error("Auto-login failed", e);
         } finally {
+          clearTimeout(safetyTimer);
           setIsRestoringSession(false);
         }
       };
       verifyUser();
     } else {
+      clearTimeout(safetyTimer);
       setIsRestoringSession(false);
     }
+    
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   // CRITICAL CHECK: Ensure URL is set
@@ -131,9 +141,7 @@ const App: React.FC = () => {
       const result = await checkUserExists(formData.telegramNick);
       
       if (result.error) {
-         // Silently ignore or set light warning? For now, if server is down, we just don't activate "Exists" mode.
-         // But maybe useful to set error message if they are explicitly typing nick to check
-         console.warn("Server check failed");
+         // Silently ignore
       } else {
          setUserExistsWarning(result.exists);
          if (result.isDay2Active) {
@@ -313,6 +321,12 @@ const App: React.FC = () => {
         <div className="flex flex-col items-center gap-4 text-warm-600">
           <Loader2 className="animate-spin" size={48} />
           <p className="font-medium text-lg">Вход...</p>
+          <button 
+             onClick={() => setIsRestoringSession(false)}
+             className="mt-4 text-xs text-warm-400 underline"
+          >
+            Долго грузится? Нажмите сюда
+          </button>
         </div>
       </div>
     );
