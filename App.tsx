@@ -387,14 +387,18 @@ const App: React.FC = () => {
                        <div className="aspect-video bg-warm-200 rounded-lg overflow-hidden mb-3 relative">
                           <img src={item.url} alt={item.title} className="w-full h-full object-cover" />
                        </div>
+                       
+                       {/* DOWNLOAD BUTTON UPDATED: Removed target="_blank" to prevent "Open with" dialog on Android */}
                        <a 
                          href={item.url.replace('export=view', 'export=download')} 
-                         target="_blank" 
-                         rel="noopener noreferrer"
-                         className="flex items-center justify-center gap-2 w-full py-2 bg-white border border-warm-300 text-warm-700 rounded-lg text-sm font-bold hover:bg-amber-50 hover:border-amber-400 transition-all"
+                         download
+                         className="flex items-center justify-center gap-2 w-full py-3 bg-white border border-warm-300 text-warm-700 rounded-lg text-sm font-bold hover:bg-amber-50 hover:border-amber-400 transition-all shadow-sm"
                        >
-                         <Download size={16} /> Скачать
+                         <Download size={16} /> Скачать файл
                        </a>
+                       <p className="text-xs text-warm-400 text-center mt-2">
+                          Если не качается — зажмите фото
+                       </p>
                     </div>
                   ))}
                </div>
