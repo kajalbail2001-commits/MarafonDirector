@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download, ArrowRight, Home, LogOut } from 'lucide-react';
+import { Send, Check, Loader2, AlertCircle, Info, Settings, Lock, Telescope, Download, ArrowRight, Home, LogOut, PartyPopper } from 'lucide-react';
 import FormInput from './components/FormInput';
 import ImageUploader from './components/ImageUploader';
 import { HomeworkData, Day2HomeworkData, UploadStatus, ApiResponse } from './types';
@@ -42,6 +42,8 @@ const App: React.FC = () => {
   
   // New State: Welcome Back (Skipped Upload)
   const [isWelcomeBack, setIsWelcomeBack] = useState<boolean>(false);
+  // Manual override to show Day 1 form even if user exists
+  const [showDay1Anyway, setShowDay1Anyway] = useState<boolean>(false);
 
   // --- TELEGRAM INIT & AUTO-LOGIN ---
   useEffect(() => {
@@ -69,9 +71,6 @@ const App: React.FC = () => {
             setIsWelcomeBack(true);
             setStatus(UploadStatus.SUCCESS);
             if (result.isDay2Active) setIsDay2Active(true);
-          } else {
-            // Nick exists locally but not on server (maybe wiped DB) -> Stay on form, allow re-upload
-            // Do nothing, just stop loading
           }
         } catch (e) {
           console.error("Auto-login failed", e);
@@ -170,8 +169,9 @@ const App: React.FC = () => {
     setErrorMessage('');
 
     try {
-      // Ensure we use the nickname from the main form if Day 2 nick is empty
-      const nick = formData.telegramNick || day2Data.telegramNick;
+      // Страховка: берем ник откуда угодно, лишь бы не пустой
+      const nick = formData.telegramNick || day2Data.telegramNick || localStorage.getItem(LOCAL_STORAGE_KEY) || "Anonymous";
+      
       const finalData = {
          ...day2Data,
          telegramNick: nick
@@ -237,6 +237,7 @@ const App: React.FC = () => {
     setReceivedAssets(null);
     setDay2Success(false);
     setIsDay2SubmissionMode(false);
+    setShowDay1Anyway(false);
   };
 
   // ---------------------------------------------------------------------------
@@ -300,7 +301,7 @@ const App: React.FC = () => {
 
               <div className="mb-6 text-center">
                  <h2 className="text-2xl font-bold text-warm-800 mb-2">Форма сдачи (День 2)</h2>
-                 <p className="text-warm-500">Ник: <span className="font-bold text-amber-600">@{formData.telegramNick || day2Data.telegramNick}</span></p>
+                 <p className="text-warm-500">Ник: <span className="font-bold text-amber-600">@{formData.telegramNick || day2Data.telegramNick || localStorage.getItem(LOCAL_STORAGE_KEY)}</span></p>
               </div>
 
               <form onSubmit={handleDay2Submit}>
@@ -450,18 +451,18 @@ const App: React.FC = () => {
             <button 
               onClick={handleGetDay2Asset}
               disabled={isFetchingAsset}
-              className="group w-full py-5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white rounded-2xl text-xl font-bold transition-all transform active:scale-[0.98] shadow-lg shadow-amber-200 relative overflow-hidden"
+              className="group w-full py-6 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-white rounded-3xl text-2xl font-extrabold transition-all transform hover:scale-[1.02] shadow-xl shadow-amber-300 relative overflow-hidden animate-pulse"
             >
               {isFetchingAsset ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="animate-spin" />
-                  Получение...
+                  Загрузка...
                 </div>
               ) : (
                 <>
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                   <div className="flex items-center justify-center gap-3 relative z-10">
-                    <Telescope className="animate-pulse" />
+                    <PartyPopper size={32} />
                     {LABELS.DAY2_ACTIVE_BTN}
                   </div>
                 </>
@@ -556,96 +557,118 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              {userExistsWarning && (
-                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col gap-4 text-amber-800 animate-fade-in">
-                  <div className="flex items-start gap-3">
-                    <Info className="shrink-0 mt-0.5 text-amber-600" />
-                    <div>
-                      <p className="font-bold mb-1">Вы уже сдавали работу</p>
-                      <p className="text-sm text-amber-700 leading-relaxed">
-                        Мы нашли задание от <strong>{formData.telegramNick}</strong>.
+              {/* FAST TRACK TO DAY 2 */}
+              {userExistsWarning && isDay2Active && !showDay1Anyway ? (
+                <div className="mt-6 animate-fade-in text-center">
+                   <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 mb-4">
+                      <div className="flex items-center justify-center gap-2 text-amber-800 font-bold text-lg mb-2">
+                        <Check size={24} className="text-green-600" />
+                        Вы уже сдали День 1!
+                      </div>
+                      <p className="text-amber-700 mb-6">
+                         Второй день уже открыт. Приступайте к заданию!
                       </p>
-                    </div>
+                      
+                      <button 
+                         type="button"
+                         onClick={handleSkipToDay2}
+                         className="w-full py-6 bg-gradient-to-tr from-amber-500 to-amber-600 text-white rounded-2xl text-2xl font-black shadow-xl shadow-amber-300 hover:shadow-2xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3 animate-pulse"
+                       >
+                          <PartyPopper size={32} />
+                          НАЧАТЬ ДЕНЬ 2
+                       </button>
+                   </div>
+                   
+                   <button 
+                     type="button" 
+                     onClick={() => setShowDay1Anyway(true)}
+                     className="text-sm text-warm-400 hover:text-warm-600 underline"
+                   >
+                     Я хочу перезалить День 1
+                   </button>
+                </div>
+              ) : (
+                /* NORMAL DAY 1 FORM (Hidden if Fast Track is Active) */
+                <>
+                  {userExistsWarning && (
+                     <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-800 mb-6">
+                        <Info className="shrink-0 mt-0.5 text-amber-600" />
+                        <div>
+                          <p className="font-bold mb-1">Режим перезаливки</p>
+                          <p className="text-sm text-amber-700">
+                            Вы уже сдавали работу, но можете отправить новую версию.
+                          </p>
+                        </div>
+                     </div>
+                  )}
+
+                  <div className="h-px bg-warm-100 my-8"></div>
+
+                  <div className="space-y-6">
+                    <ImageUploader
+                      id="baseRef"
+                      label={LABELS.BASE_REF}
+                      value={formData.baseReference}
+                      onChange={(val) => setFormData(prev => ({ ...prev, baseReference: val }))}
+                      required
+                    />
+                    <ImageUploader
+                      id="angle1"
+                      label={LABELS.ANGLE_1}
+                      value={formData.angle1}
+                      onChange={(val) => setFormData(prev => ({ ...prev, angle1: val }))}
+                      required
+                    />
+                    <ImageUploader
+                      id="angle2"
+                      label={LABELS.ANGLE_2}
+                      value={formData.angle2}
+                      onChange={(val) => setFormData(prev => ({ ...prev, angle2: val }))}
+                      required
+                    />
+                    <ImageUploader
+                      id="angle3"
+                      label={LABELS.ANGLE_3}
+                      value={formData.angle3}
+                      onChange={(val) => setFormData(prev => ({ ...prev, angle3: val }))}
+                      required
+                    />
                   </div>
 
-                  {isDay2Active && (
-                    <button 
-                       type="button"
-                       onClick={handleSkipToDay2}
-                       className="w-full py-3 bg-white border-2 border-amber-300 text-amber-700 font-bold rounded-lg hover:bg-amber-100 hover:border-amber-400 transition-all flex items-center justify-center gap-2 shadow-sm"
-                     >
-                        <Telescope size={18} />
-                        Перейти ко Дню 2 (без загрузки)
-                     </button>
+                  {errorMessage && (
+                    <div className="mt-8 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600">
+                      <AlertCircle className="shrink-0 mt-0.5" />
+                      <p className="font-medium">{errorMessage}</p>
+                    </div>
                   )}
-                </div>
+
+                  <div className="mt-10 sticky bottom-6 z-20">
+                    <button
+                      type="submit"
+                      disabled={status === UploadStatus.UPLOADING}
+                      className={`w-full py-5 text-white rounded-2xl text-xl font-bold transition-all shadow-lg flex items-center justify-center gap-3 transform active:scale-[0.98]
+                        ${userExistsWarning 
+                          ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200/50' 
+                          : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200/50'
+                        }
+                        ${(status === UploadStatus.UPLOADING) ? 'opacity-80 cursor-not-allowed' : ''}
+                      `}
+                    >
+                      {status === UploadStatus.UPLOADING ? (
+                        <>
+                          <Loader2 className="animate-spin" size={24} />
+                          {LABELS.SENDING}
+                        </>
+                      ) : (
+                        <>
+                          <Send size={24} />
+                          {userExistsWarning ? 'Обновить задание' : (LABELS.SUBTITLE ? LABELS.SUBMIT_BTN : "Отправить")}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
               )}
-            </div>
-
-            <div className="h-px bg-warm-100 my-8"></div>
-
-            <div className="space-y-6">
-              <ImageUploader
-                id="baseRef"
-                label={LABELS.BASE_REF}
-                value={formData.baseReference}
-                onChange={(val) => setFormData(prev => ({ ...prev, baseReference: val }))}
-                required
-              />
-              <ImageUploader
-                id="angle1"
-                label={LABELS.ANGLE_1}
-                value={formData.angle1}
-                onChange={(val) => setFormData(prev => ({ ...prev, angle1: val }))}
-                required
-              />
-              <ImageUploader
-                id="angle2"
-                label={LABELS.ANGLE_2}
-                value={formData.angle2}
-                onChange={(val) => setFormData(prev => ({ ...prev, angle2: val }))}
-                required
-              />
-              <ImageUploader
-                id="angle3"
-                label={LABELS.ANGLE_3}
-                value={formData.angle3}
-                onChange={(val) => setFormData(prev => ({ ...prev, angle3: val }))}
-                required
-              />
-            </div>
-
-            {errorMessage && (
-              <div className="mt-8 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600">
-                <AlertCircle className="shrink-0 mt-0.5" />
-                <p className="font-medium">{errorMessage}</p>
-              </div>
-            )}
-
-            <div className="mt-10 sticky bottom-6 z-20">
-               <button
-                type="submit"
-                disabled={status === UploadStatus.UPLOADING}
-                className={`w-full py-5 text-white rounded-2xl text-xl font-bold transition-all shadow-lg flex items-center justify-center gap-3 transform active:scale-[0.98]
-                  ${userExistsWarning 
-                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200/50' 
-                    : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200/50'
-                  }
-                  ${(status === UploadStatus.UPLOADING) ? 'opacity-80 cursor-not-allowed' : ''}
-                `}
-              >
-                {status === UploadStatus.UPLOADING ? (
-                  <>
-                    <Loader2 className="animate-spin" size={24} />
-                    {LABELS.SENDING}
-                  </>
-                ) : (
-                  <>
-                    <Send size={24} />
-                    {userExistsWarning ? 'Обновить задание' : (LABELS.SUBTITLE ? LABELS.SUBMIT_BTN : "Отправить")}
-                  </>
-                )}
-              </button>
             </div>
 
           </form>
