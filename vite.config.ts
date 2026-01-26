@@ -6,5 +6,8 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
+    // Важно: es2015 обеспечивает работу на старых Android (Telegram WebView)
+    target: 'es2015', 
+    minify: 'esbuild',
   }
 });

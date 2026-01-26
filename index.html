@@ -7,10 +7,8 @@
     
     <!-- Глобальный перехватчик ошибок (чтобы не было белого экрана без причин) -->
     <script>
-      window.onerror = function(msg, url, line, col, error) {
-        // Игнорируем ошибки ResizeObserver, они безопасны
-        if (msg && msg.includes && (msg.includes('ResizeObserver') || msg.includes('Script error'))) return;
-        
+      // Функция показа ошибки на экране
+      function showErrorBox(title, details) {
         var box = document.getElementById('error-box');
         if (!box) {
           box = document.createElement('div');
@@ -19,17 +17,32 @@
           box.style.top = '0';
           box.style.left = '0';
           box.style.width = '100%';
-          box.style.background = '#ffebee';
+          box.style.height = '100%'; 
+          box.style.overflow = 'auto';
+          box.style.background = '#fff0f0';
           box.style.color = '#b71c1c';
           box.style.padding = '20px';
-          box.style.zIndex = '9999';
+          box.style.zIndex = '999999';
           box.style.fontFamily = 'monospace';
-          box.style.fontSize = '12px';
+          box.style.fontSize = '14px';
           box.style.whiteSpace = 'pre-wrap';
+          box.style.boxSizing = 'border-box';
           document.body.appendChild(box);
         }
-        box.textContent += "Error: " + msg + "\nLine: " + line + "\n" + (error ? error.stack : '') + "\n\n";
+        box.innerHTML += "<strong>" + title + "</strong><br/>" + details + "<br/><hr/>";
+      }
+
+      // 1. Обычные ошибки JS
+      window.onerror = function(msg, url, line, col, error) {
+        // Игнорируем безопасные ошибки
+        if (msg && typeof msg === 'string' && (msg.includes('ResizeObserver') || msg.includes('Script error'))) return;
+        showErrorBox("Global Error:", "Msg: " + msg + "\nLine: " + line + "\nStack: " + (error ? error.stack : 'N/A'));
       };
+
+      // 2. Ошибки в Promise (async/await) - часто причина белого экрана
+      window.addEventListener('unhandledrejection', function(event) {
+        showErrorBox("Unhandled Promise Rejection:", event.reason ? event.reason.stack : event.reason);
+      });
     </script>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -67,6 +80,7 @@
         background-color: #FDFBF7;
       }
     </style>
+    <!-- УДАЛЕН importmap, так как он конфликтует с локальной сборкой Vite -->
 <script type="importmap">
 {
   "imports": {
