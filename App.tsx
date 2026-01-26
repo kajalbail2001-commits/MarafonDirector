@@ -461,6 +461,27 @@ const App: React.FC = () => {
                  <p className="text-xs text-red-400 mb-4">Откройте через Telegram для отправки в личку</p>
                )}
                {/* ======================================== */}
+               
+               {/* === MOVED UP: SUBMIT BUTTON === */}
+               <div className="bg-amber-50 border border-amber-100 rounded-xl p-6 mb-8">
+                  <h3 className="text-xl font-bold text-amber-900 mb-2">Готовы сдать работу?</h3>
+                  <p className="text-amber-700 mb-6 text-sm">
+                    Когда выполните задание с этими референсами, нажмите кнопку ниже.
+                  </p>
+                  <button 
+                    onClick={() => setIsDay2SubmissionMode(true)}
+                    className="w-full py-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-lg shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    {LABELS.DAY2_GO_TO_SUBMIT} <ArrowRight size={20} />
+                  </button>
+               </div>
+
+               <div className="h-px bg-warm-200 w-full mb-8"></div>
+
+               {/* === MANUAL DOWNLOAD SECTION (MOVED DOWN) === */}
+               <p className="text-sm text-warm-500 mb-4 text-center px-4">
+                 ⚠️ У кого не приходят референсы по синей кнопке, попробуйте скачать вручную:
+               </p>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-left">
                   {[
@@ -485,20 +506,6 @@ const App: React.FC = () => {
                   ))}
                </div>
                
-               <div className="h-px bg-warm-200 w-full mb-8"></div>
-
-               <div className="bg-amber-50 border border-amber-100 rounded-xl p-6">
-                  <h3 className="text-xl font-bold text-amber-900 mb-2">Готовы сдать работу?</h3>
-                  <p className="text-amber-700 mb-6 text-sm">
-                    Когда выполните задание с этими референсами, нажмите кнопку ниже.
-                  </p>
-                  <button 
-                    onClick={() => setIsDay2SubmissionMode(true)}
-                    className="w-full py-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-lg shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
-                  >
-                    {LABELS.DAY2_GO_TO_SUBMIT} <ArrowRight size={20} />
-                  </button>
-               </div>
              </div>
            </div>
         </div>
