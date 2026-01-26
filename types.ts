@@ -41,6 +41,7 @@ declare global {
       WebApp: {
         ready: () => void;
         expand: () => void;
+        openLink: (url: string, options?: { tryInstantView?: boolean }) => void;
         // Можно добавить другие методы при необходимости
       };
     };

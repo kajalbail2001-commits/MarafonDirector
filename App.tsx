@@ -240,6 +240,21 @@ const App: React.FC = () => {
     setShowDay1Anyway(false);
   };
 
+  // CORRECT DOWNLOAD HANDLER FOR ANDROID/TELEGRAM
+  const handleDownloadAsset = (url: string) => {
+    // Ensure we request the download version
+    const downloadUrl = url.replace('export=view', 'export=download');
+    
+    if (window.Telegram?.WebApp) {
+      // Telegram WebApp: Force external browser. This fixes the "UC.bin" issue
+      // because the system browser handles the Content-Disposition header correctly.
+      window.Telegram.WebApp.openLink(downloadUrl, { tryInstantView: false });
+    } else {
+      // Standard Browser: Open in new tab
+      window.open(downloadUrl, '_blank');
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // LOADING SCREEN (Checking LocalStorage/API)
   // ---------------------------------------------------------------------------
@@ -388,16 +403,16 @@ const App: React.FC = () => {
                           <img src={item.url} alt={item.title} className="w-full h-full object-cover" />
                        </div>
                        
-                       {/* DOWNLOAD BUTTON UPDATED: Removed target="_blank" to prevent "Open with" dialog on Android */}
-                       <a 
-                         href={item.url.replace('export=view', 'export=download')} 
-                         download
+                       {/* DOWNLOAD BUTTON UPDATED: Uses onClick handler to force external browser */}
+                       <button 
+                         onClick={() => handleDownloadAsset(item.url)}
                          className="flex items-center justify-center gap-2 w-full py-3 bg-white border border-warm-300 text-warm-700 rounded-lg text-sm font-bold hover:bg-amber-50 hover:border-amber-400 transition-all shadow-sm"
                        >
                          <Download size={16} /> Скачать файл
-                       </a>
+                       </button>
                        <p className="text-xs text-warm-400 text-center mt-2">
-                          Если не качается — зажмите фото
+                          Откроется браузер для скачивания. <br/>
+                          Или зажмите фото для сохранения.
                        </p>
                     </div>
                   ))}
