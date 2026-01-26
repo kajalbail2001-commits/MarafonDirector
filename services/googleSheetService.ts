@@ -19,11 +19,11 @@ const validateUrl = (url: string) => {
   return true;
 };
 
-export const checkUserExists = async (nick: string): Promise<{ exists: boolean; isDay2Active: boolean }> => {
+export const checkUserExists = async (nick: string): Promise<{ exists: boolean; isDay2Active: boolean; error?: boolean }> => {
   const url = getCleanUrl();
   
   if (!validateUrl(url)) {
-    return { exists: false, isDay2Active: false }; 
+    return { exists: false, isDay2Active: false, error: true }; 
   }
 
   try {
@@ -36,24 +36,29 @@ export const checkUserExists = async (nick: string): Promise<{ exists: boolean; 
     
     if (!response.ok) {
         console.warn("User check network error:", response.status);
-        return { exists: false, isDay2Active: false };
+        return { exists: false, isDay2Active: false, error: true };
     }
 
     const text = await response.text();
     try {
       const data = JSON.parse(text);
+      if (data.status === 'error') {
+          // Если скрипт вернул явную ошибку (например, 500 внутри try/catch)
+          return { exists: false, isDay2Active: false, error: true };
+      }
       return { 
         exists: data.exists === true, 
-        isDay2Active: data.isDay2Active === true 
+        isDay2Active: data.isDay2Active === true,
+        error: false
       };
     } catch (e) {
       // Если вернулся HTML (например, ошибка скрипта), не ломаем приложение
       console.warn("Server returned non-JSON response for checkUserExists:", text.substring(0, 150));
-      return { exists: false, isDay2Active: false };
+      return { exists: false, isDay2Active: false, error: true };
     }
   } catch (error) {
     console.error("Error checking user existence:", error);
-    return { exists: false, isDay2Active: false };
+    return { exists: false, isDay2Active: false, error: true };
   }
 };
 

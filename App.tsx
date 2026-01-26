@@ -65,16 +65,18 @@ const App: React.FC = () => {
     // 2. Auto-Login Logic
     const savedNick = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (savedNick) {
-      // If we have a saved nick, verify it with the backend
+      // Pre-fill forms immediately for better UX
+      setFormData(prev => ({ ...prev, telegramNick: savedNick }));
+      setDay2Data(prev => ({ ...prev, telegramNick: savedNick }));
+
       const verifyUser = async () => {
         try {
-          // Pre-fill forms
-          setFormData(prev => ({ ...prev, telegramNick: savedNick }));
-          setDay2Data(prev => ({ ...prev, telegramNick: savedNick }));
-          
           const result = await checkUserExists(savedNick);
           
-          if (result.exists) {
+          if (result.error) {
+             // Server error: Don't just show Day 1, warn user
+             setErrorMessage("⚠️ Сервер недоступен (ошибка скрипта или сети). Ваш статус не загружен.");
+          } else if (result.exists) {
             // User confirmed -> Go straight to Success/Menu screen
             setUserExistsWarning(true);
             setIsWelcomeBack(true);
@@ -123,13 +125,20 @@ const App: React.FC = () => {
     if (!formData.telegramNick || formData.telegramNick.length < 3) return;
     
     setIsCheckingUser(true);
+    setErrorMessage(""); // Clear previous errors
+    
     try {
       const result = await checkUserExists(formData.telegramNick);
-      setUserExistsWarning(result.exists);
       
-      // Update global Day 2 status from the check result
-      if (result.isDay2Active) {
-        setIsDay2Active(true);
+      if (result.error) {
+         // Silently ignore or set light warning? For now, if server is down, we just don't activate "Exists" mode.
+         // But maybe useful to set error message if they are explicitly typing nick to check
+         console.warn("Server check failed");
+      } else {
+         setUserExistsWarning(result.exists);
+         if (result.isDay2Active) {
+           setIsDay2Active(true);
+         }
       }
     } catch (e) {
       console.error("Check failed", e);
@@ -266,6 +275,7 @@ const App: React.FC = () => {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     // Reset states
     setStatus(UploadStatus.IDLE);
+    setErrorMessage('');
     setFormData({
       telegramNick: '',
       baseReference: null,
@@ -613,6 +623,18 @@ const App: React.FC = () => {
 
           <form onSubmit={handleSubmit}>
             <div className="mb-8">
+              {/* === ERROR BANNER FROM SERVER === */}
+              {errorMessage && !day2Success && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-700 shadow-sm animate-fade-in">
+                  <AlertCircle className="shrink-0 mt-0.5" />
+                  <div>
+                     <p className="font-bold">Ошибка</p>
+                     <p className="text-sm">{errorMessage}</p>
+                  </div>
+                </div>
+              )}
+              {/* ================================= */}
+
               <FormInput
                 id="telegram"
                 label={LABELS.TELEGRAM_NICK}
@@ -710,13 +732,6 @@ const App: React.FC = () => {
                       required
                     />
                   </div>
-
-                  {errorMessage && (
-                    <div className="mt-8 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600">
-                      <AlertCircle className="shrink-0 mt-0.5" />
-                      <p className="font-medium">{errorMessage}</p>
-                    </div>
-                  )}
 
                   <div className="mt-10 sticky bottom-6 z-20">
                     <button

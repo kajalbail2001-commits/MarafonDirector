@@ -3,6 +3,7 @@ var DAY2_SHEET_NAME = "Day_2_Submissions";
 var BOT_TOKEN = "8512515016:AAGA5SJdmvjYZEOH71krXVkkAoRE73727Oc"; 
 var IS_DAY_2_ACTIVE = true; 
 
+// --- ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ ПРАВ (ЗАПУСТИТЬ 1 РАЗ) ---
 function A_SETUP_CLICK_ME() {
   Logger.log("🔧 НАСТРОЙКА...");
   DriveApp.getRootFolder();
@@ -10,6 +11,7 @@ function A_SETUP_CLICK_ME() {
   Logger.log("✅ ПРАВА ЕСТЬ. Делайте Deploy -> New Version.");
 }
 
+// --- ОБРАБОТЧИКИ ---
 function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
 
@@ -29,7 +31,7 @@ function handleRequest(e) {
     } else {
       out = { "status": "error", "message": "No data" };
     }
-    out.version = "v4.2";
+    out.version = "v4.3";
     return sendJSON(out);
   } catch (err) { 
     return sendJSON({ "status": "error", "message": "Err: " + err.toString() });
