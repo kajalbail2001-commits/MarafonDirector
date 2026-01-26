@@ -31,7 +31,7 @@ function handleRequest(e) {
     } else {
       out = { "status": "error", "message": "No data" };
     }
-    out.version = "v4.3";
+    out.version = "v4.5";
     return sendJSON(out);
   } catch (err) { 
     return sendJSON({ "status": "error", "message": "Err: " + err.toString() });
@@ -56,20 +56,53 @@ function handleSubmitDay2(d) {
 }
 
 function handleSubmitDay1(d) {
-    var s = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet(), f = getOrCreateFolder(FOLDER_NAME);
-    var n = d.telegramNick || "Anon";
+    // Ищем лист Дня 1 (любой, который не День 2)
+    var s = getDay1Sheet(); 
+    var f = getOrCreateFolder(FOLDER_NAME);
+    var n = cleanStr(d.telegramNick || "Anon");
+    
+    // Проверка дублей
     var rows = s.getDataRange().getValues();
     for (var i=1; i<rows.length; i++) {
-        if (String(rows[i][1]).toLowerCase() === String(n).toLowerCase()) s.getRange(i+1, 1, 1, s.getLastColumn()).setBackground("#FFCDD2");
+        if (cleanStr(rows[i][1]) === n) {
+             s.getRange(i+1, 1, 1, s.getLastColumn()).setBackground("#FFCDD2");
+        }
     }
-    s.appendRow([new Date(), n, procImg(d.baseReference, f, n+"_b"), procImg(d.angle1, f, n+"_a1"), procImg(d.angle2, f, n+"_a2"), procImg(d.angle3, f, n+"_a3")]);
+    s.appendRow([new Date(), d.telegramNick, procImg(d.baseReference, f, n+"_b"), procImg(d.angle1, f, n+"_a1"), procImg(d.angle2, f, n+"_a2"), procImg(d.angle3, f, n+"_a3")]);
     return { "status": "success", "isDay2Active": IS_DAY_2_ACTIVE };
 }
 
 function checkUser(nick) {
-    var data = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet().getDataRange().getValues();
-    for (var i=1; i<data.length; i++) if (String(data[i][1]).toLowerCase() === String(nick).toLowerCase()) return { "exists": true, "isDay2Active": IS_DAY_2_ACTIVE };
+    var s = getDay1Sheet(); 
+    var data = s.getDataRange().getValues();
+    var search = cleanStr(nick);
+    
+    for (var i=1; i<data.length; i++) {
+        // cleanStr теперь убирает @, так что @nick и nick совпадут
+        if (cleanStr(data[i][1]) === search) {
+            return { "exists": true, "isDay2Active": IS_DAY_2_ACTIVE };
+        }
+    }
     return { "exists": false, "isDay2Active": IS_DAY_2_ACTIVE };
+}
+
+// Убираем @, пробелы и приводим к нижнему регистру
+function cleanStr(s) {
+  return String(s).toLowerCase().replace(/@/g, '').trim().replace(/\s+/g, '');
+}
+
+// Функция для умного поиска листа Дня 1
+function getDay1Sheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  // Ищем первый лист, имя которого НЕ совпадает с именем листа второго дня
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getName() !== DAY2_SHEET_NAME) {
+      return sheets[i];
+    }
+  }
+  // Если вдруг остались только листы Дня 2 (невозможно), берем первый
+  return sheets[0];
 }
 
 function sendMessageToTelegram(chatId, text) {
@@ -88,12 +121,13 @@ function sendPhotoToTelegram(chatId, url, cap) {
 
 function getRandomAsset(reqNick) {
   if (!IS_DAY_2_ACTIVE) return { "status": "error", "message": "Locked" };
-  var s = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var s = getDay1Sheet(); // Ищем ассеты в листе Дня 1
   var rows = s.getDataRange().getValues(), forms = s.getDataRange().getFormulas();
   if (rows.length < 2) return { "status": "error", "message": "Empty" };
   var cands = [];
+  var cleanReq = cleanStr(reqNick);
   for(var i=1; i<rows.length; i++) {
-     if(String(rows[i][1]).toLowerCase() === String(reqNick).toLowerCase()) continue;
+     if(cleanStr(rows[i][1]) === cleanReq) continue;
      var fb = forms[i][2] || rows[i][2];
      if (fb && String(fb).length > 10) cands.push({ n: rows[i][1], b: exUrl(fb), a1: exUrl(forms[i][3]||rows[i][3]), a2: exUrl(forms[i][4]||rows[i][4]), a3: exUrl(forms[i][5]||rows[i][5]) });
   }
