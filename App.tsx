@@ -225,8 +225,13 @@ const App: React.FC = () => {
     
     setIsSendingToChat(true);
     try {
-       await sendAssetsToChat(telegramUserId, receivedAssets);
-       setSentToChatSuccess(true);
+       const response = await sendAssetsToChat(telegramUserId, receivedAssets);
+       if (response.status === 'success') {
+         setSentToChatSuccess(true);
+       } else {
+         // Show specific error from backend (e.g. Bot blocked)
+         alert("Ошибка отправки: " + response.message + "\n\nПопробуйте перезапустить бота командой /start");
+       }
     } catch (e) {
        alert("Не удалось отправить. Попробуйте еще раз или скачайте вручную.");
     } finally {
