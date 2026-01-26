@@ -1,20 +1,36 @@
-// --- ИНСТРУКЦИЯ ---
-// 1. Вставьте этот код в Code.gs (очистив старый).
-// 2. Выберите функцию "_INSTALL_FIX" вверху и нажмите Run (▶).
-// 3. Дайте разрешения: "Review Permissions" -> Ваш Аккаунт -> "Advanced" -> "Go to ... (unsafe)" -> "Allow".
-// 4. Сделайте Deploy -> New Deployment.
+// ============================================================================
+// ИНСТРУКЦИЯ (ЧИТАТЬ ВНИМАТЕЛЬНО):
+// 1. Вставьте этот код в файл Code.gs.
+// 2. НАЖМИТЕ СОХРАНИТЬ (💾) ИЛИ CTRL+S. ЭТО ВАЖНО!
+// 3. Вверху в выпадающем списке выберите функцию "A_SETUP_CLICK_ME".
+// 4. Нажмите кнопку "Run" (▶).
+// 5. Дайте разрешения (Review Permissions -> Advanced -> Go to (unsafe) -> Allow).
+// 6. Сделайте Deploy -> New Deployment.
+// ============================================================================
 
+// --- НАСТРОЙКИ ---
 var FOLDER_NAME = "Marathon_Images"; 
 var DAY2_SHEET_NAME = "Day_2_Submissions";
 var BOT_TOKEN = "8512515016:AAGA5SJdmvjYZEOH71krXVkkAoRE73727Oc"; 
 var IS_DAY_2_ACTIVE = true; 
 
-function _INSTALL_FIX() {
-  console.log("Запрос разрешений...");
-  DriveApp.getFiles(); // Триггер прав на Диск
-  try { UrlFetchApp.fetch("https://api.telegram.org"); } catch(e) {} // Триггер прав на Интернет
-  console.log("✅ УСПЕШНО. Теперь делайте Deploy.");
+// --- ЗАПУСТИТЕ ЭТУ ФУНКЦИЮ ПЕРВЫЙ РАЗ РУКАМИ ---
+function A_SETUP_CLICK_ME() {
+  Logger.log("📢 НАЧИНАЕМ УСТАНОВКУ...");
+  Logger.log("1. Проверяем доступ к Диску...");
+  var folders = DriveApp.getFolders(); 
+  
+  Logger.log("2. Проверяем доступ к Интернету (Telegram)...");
+  try {
+    UrlFetchApp.fetch("https://api.telegram.org");
+  } catch(e) {
+    // Ошибка тут нормальна, главное что мы дернули fetch
+  }
+  
+  Logger.log("✅ УСПЕШНО! Все разрешения получены.");
+  Logger.log("👉 Теперь нажмите синюю кнопку 'Deploy' -> 'New deployment' справа сверху.");
 }
+// -----------------------------------------------
 
 function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
@@ -47,7 +63,7 @@ function handleSendAssets(d) {
    errs.push(sendPhotoToTelegram(chatId, d.assets.angle3, "📸 Ракурс 3"));
    var fails = errs.filter(function(r){ return r !== "OK"; });
    if (fails.length > 0) return sendJSON({ "status": "error", "message": "Errors: " + fails.join(", ") });
-   sendMessageToTelegram(chatId, "✅ Готово!");
+   sendMessageToTelegram(chatId, "✅ Готово! Удачи с заданием 🔭");
    return sendJSON({ "status": "success" });
 }
 
@@ -97,7 +113,7 @@ function sendPhotoToTelegram(chatId, driveUrl, cap) {
   try {
     var id = (String(driveUrl).match(/id=([a-zA-Z0-9_-]+)/) || [])[1];
     if (!id) return "NoID";
-    var blob = DriveApp.getFileById(id).getBlob().setName("img.jpg"); 
+    var blob = DriveApp.getFileById(id).getBlob().setName("image.jpg"); 
     var res = UrlFetchApp.fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendPhoto', {
         method: 'post', payload: { chat_id: String(chatId), photo: blob, caption: cap }, muteHttpExceptions: true
     });
